@@ -1,0 +1,14 @@
+{
+    "type": "code",
+    "modid": "cavetweaks",
+    "name": "CaveTweaks",
+    "authors": [
+        "Pseudonym_Tim"
+    ],
+    "description": "Enhances cave generation for more interesting exploration",
+    "version": "1.0.0",
+    "side": "server",
+    "dependencies": {
+        "game": ""
+    }
+}
