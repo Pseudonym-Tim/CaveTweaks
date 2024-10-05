@@ -19,11 +19,8 @@ namespace CaveTweaks
         public static ICoreServerAPI ServerAPI { get; set; } = null;
         public Harmony harmonyPatcher;
         private static IWorldGenBlockAccessor worldGenBlockAccessor;
-        private static LCGRandom caveRand;
+        private static MTRandom caveRand;
         private static NormalizedSimplexNoise basaltNoise;
-
-        // (Overridden to 5 in GenCaves class)...
-        public static int ChunkRange { get { return 5; } }
 
         public void Init(ICoreServerAPI api)
         {
@@ -90,6 +87,7 @@ namespace CaveTweaks
 
                     return false;
                 }
+
                 if((caveRand.NextInt(5) != 0 || horRadius < 2f) && posX > (double)(-(double)horRadius * 2f) && posX < (double)(32f + horRadius * 2f) && posZ > (double)(-(double)horRadius * 2f) && posZ < (double)(32f + horRadius * 2f))
                 {
                     SetBlocks(__instance, chunks, horRadius, vertRadius, posX, posY, posZ, terrainheightmap, rainheightmap, chunkX, chunkZ, false);
@@ -172,6 +170,7 @@ namespace CaveTweaks
                 {
                     data = new Dictionary<Vec3i, HotSpringGenData>();
                 }
+
                 data[new Vec3i((int)centerX, (int)centerY, (int)centerZ)] = new HotSpringGenData
                 {
                     horRadius = (double)horRadius
@@ -185,6 +184,7 @@ namespace CaveTweaks
             for(int lx2 = num3; lx2 <= maxdx; lx2++)
             {
                 double xdistRel = ((double)lx2 - centerX) * ((double)lx2 - centerX) / hRadiusSq;
+
                 for(int lz2 = mindz; lz2 <= maxdz; lz2++)
                 {
                     double zdistRel = ((double)lz2 - centerZ) * ((double)lz2 - centerZ) / hRadiusSq;
@@ -220,6 +220,7 @@ namespace CaveTweaks
                                 else
                                 {
                                     chunkBlockData[index3d] = 0;
+
                                     if(y2 > yLavaStart)
                                     {
                                         chunkBlockData[index3d] = globalConfig.basaltBlockId;
@@ -228,15 +229,18 @@ namespace CaveTweaks
                                     {
                                         chunkBlockData.SetFluid(index3d, globalConfig.lavaBlockId);
                                     }
+
                                     if(y2 <= yLavaStart)
                                     {
-                                        worldGenBlockAccessor.ScheduleBlockLightUpdate(new BlockPos(chunkX * 32 + lx2, y2, chunkZ * 32 + lz2), airBlockId, globalConfig.lavaBlockId);
+                                        BlockPos blockPos = new BlockPos(chunkX * 32 + lx2, y2, chunkZ * 32 + lz2);
+                                        worldGenBlockAccessor.ScheduleBlockLightUpdate(blockPos, airBlockId, globalConfig.lavaBlockId);
                                     }
                                 }
                             }
                             else if(y2 < 12)
                             {
                                 chunkBlockData[index3d] = 0;
+
                                 if(y2 > yLavaStart)
                                 {
                                     chunkBlockData[index3d] = globalConfig.basaltBlockId;
@@ -291,7 +295,7 @@ namespace CaveTweaks
             int worldheight = ServerAPI.WorldManager.MapSizeY;
 
             worldGenBlockAccessor.BeginColumn();
-            int depthBasedCaveCount = (worldheight - 20) / 16;
+            int depthBasedCaveCount = (worldheight - 20) / 32; // Number of caves per chunk scaling with (worldheight - 20)... - Tim
 
             FieldInfo chunkRandField = AccessTools.Field(typeof(GenCaves), "chunkRand");
             LCGRandom chunkRand = (LCGRandom)chunkRandField.GetValue(__instance);
@@ -334,7 +338,7 @@ namespace CaveTweaks
                 float curviness = (rnd == 0) ? 0.035f : ((rnd2 < 30) ? 0.5f : 0.1f);
                 int maxIterations = ChunkRange * 32 - 16;
                 maxIterations -= chunkRand.NextInt(maxIterations / 4);
-                caveRand.SetWorldSeed((long)chunkRand.NextInt(10000000));
+                caveRand.SetWorldSeed((ulong)chunkRand.NextInt(10000000));
                 caveRand.InitPositionSeed(chunkX + cdx, chunkZ + cdz);
                 CarveTunnel(__instance, chunks, chunkX, chunkZ, (double)posX, (double)posY, (double)posZ, horAngle, vertAngle, horizontalSize, verticalSize, 0, maxIterations, 0, extraBranchy || depthIncreasedBranching, curviness, largeNearLavaLayer);
             }
@@ -346,8 +350,7 @@ namespace CaveTweaks
         [HarmonyPatch(typeof(GenCaves), "initWorldGen")]
         public static bool initWorldGen(GenCaves __instance)
         {
-            Debug.Log("INIT WORLD GEN!");
-            caveRand = new LCGRandom((long)(ServerAPI.WorldManager.Seed + 123128));
+            caveRand = new MTRandom((ulong)(ServerAPI.WorldManager.Seed + 123128));
             basaltNoise = NormalizedSimplexNoise.FromDefaultOctaves(2, 0.2857142984867096, 0.8999999761581421, (long)(ServerAPI.World.Seed + 12));
             return true;
         }
@@ -381,15 +384,15 @@ namespace CaveTweaks
                 float horRadius = 1.5f + GameMath.FastSin(relPos * 3.1415927f) * horizontalSize + horRadiusGainAccum;
                 horRadius = Math.Min(horRadius, Math.Max(1f, horRadius - horRadiusLossAccum));
                 float vertRadius = 1.5f + GameMath.FastSin(relPos * 3.1415927f) * (verticalSize + horRadiusLossAccum / 4f) + verHeightGainAccum;
+
                 vertRadius = Math.Min(vertRadius, Math.Max(0.6f, vertRadius - verHeightLossAccum));
                 float advanceHor = GameMath.FastCos(vertAngle);
                 float advanceVer = GameMath.FastSin(vertAngle);
 
-                // Check if we are near the surface and increase chance of the cave opening up... - Tim
+                // Increase the chance of the cave tunneling upward near the surface... - Tim
                 if(posY < 60 && caveRand.NextFloat() < surfaceOpeningChance)
                 {
-                    // Increase the chance of the cave tunneling upward near the surface - Tim
-                    vertAngle += (caveRand.NextFloat() - 0.5f) * 0.2f; // Adds some vertical variation, pushing toward the surface - Tim
+                    vertAngle += (caveRand.NextFloat() - 0.5f) * 0.2f; // Adds some vertical variation... - Tim
                 }
 
                 if(largeNearLavaLayer)
@@ -507,5 +510,8 @@ namespace CaveTweaks
 
             return false;
         }
+
+        // (Overridden to 5 in GenCaves class)...
+        public static int ChunkRange { get { return 5; } }
     }
 }
