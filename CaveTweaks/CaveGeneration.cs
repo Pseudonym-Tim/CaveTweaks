@@ -384,8 +384,17 @@ namespace CaveTweaks
                 float horRadius = 1.5f + GameMath.FastSin(relPos * 3.1415927f) * horizontalSize + horRadiusGainAccum;
                 horRadius = Math.Min(horRadius, Math.Max(1f, horRadius - horRadiusLossAccum));
                 float vertRadius = 1.5f + GameMath.FastSin(relPos * 3.1415927f) * (verticalSize + horRadiusLossAccum / 4f) + verHeightGainAccum;
-
                 vertRadius = Math.Min(vertRadius, Math.Max(0.6f, vertRadius - verHeightLossAccum));
+
+                // Use an extreme shrink factor to quickly close the cave approaching Y=12 - Tim
+                // (So we don't cut off the cave to reveal a completely flat basalt floor)
+                if(posY <= 16)
+                {
+                    float factor = Math.Max((float)Math.Pow((posY - 12) / 4f, 5), 0.01f);
+                    horRadius *= factor;
+                    vertRadius *= factor;
+                }
+
                 float advanceHor = GameMath.FastCos(vertAngle);
                 float advanceVer = GameMath.FastSin(vertAngle);
 
