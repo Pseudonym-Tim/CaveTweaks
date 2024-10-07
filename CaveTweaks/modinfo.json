@@ -5,7 +5,7 @@
     "authors": [
         "Pseudonym_Tim"
     ],
-    "description": "Enhances cave generation for more interesting exploration",
+    "description": "Enhances cave generation for more interesting exploration!",
     "version": "1.0.0",
     "side": "server",
     "dependencies": {
