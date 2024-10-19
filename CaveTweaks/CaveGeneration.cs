@@ -376,7 +376,10 @@ namespace CaveTweaks
             int branchRand = (branchLevel + 1) * (extraBranchy ? 12 : 25);
 
             // Higher chance to open near the surface... - Tim
-            float surfaceOpeningChance = (float)Math.Max(0.1, (100 - posY) / 100); 
+            //float surfaceOpeningChance = (float)Math.Max(0.1, (100 - posY) / 100); 
+
+            // Decreased chance to open near the surface... - Tim
+            float surfaceDecreasingChance = posY < 60 ? 0.1f : (float)Math.Max(0, 1.0f - (posY - 60) / 40f);
 
             while(currentIteration++ < maxIterations)
             {
@@ -398,11 +401,17 @@ namespace CaveTweaks
                 float advanceHor = GameMath.FastCos(vertAngle);
                 float advanceVer = GameMath.FastSin(vertAngle);
 
+                // Decrease the chance of the cave tunneling upward above Y = 60... - Tim
+                if(posY >= 60 && caveRand.NextFloat() < surfaceDecreasingChance)
+                {
+                    vertAngle -= (caveRand.NextFloat() - 0.5f) * 0.2f;
+                }
+
                 // Increase the chance of the cave tunneling upward near the surface... - Tim
-                if(posY < 60 && caveRand.NextFloat() < surfaceOpeningChance)
+                /*if(posY < 60 && caveRand.NextFloat() < surfaceOpeningChance)
                 {
                     vertAngle += (caveRand.NextFloat() - 0.5f) * 0.2f; // Adds some vertical variation... - Tim
-                }
+                }*/
 
                 if(largeNearLavaLayer)
                 {
@@ -505,9 +514,16 @@ namespace CaveTweaks
                     CarveTunnel(__instance, chunks, chunkX, chunkZ, posX, posY + vertRadius / 2, posZ, horAngle + (caveRand.NextFloat() - 0.5f), vertAngle + (caveRand.NextFloat() - 0.5f) * 0.3f, horizontalSize, verticalSize, currentIteration, maxIterations - currentIteration / 2, branchLevel + 1, true, curviness, largeNearLavaLayer);
                 }
 
-                if(branchLevel < 1 && horRadius > 3f && posY > 60.0 && caveRand.NextInt(60) == 0)
+                bool shaftsEnable = false;
+                int createShaftChance = 60 * 3; // Make vertical shafts 3 times less likely... - Tim
+
+                if(branchLevel < 1 && horRadius > 3f && posY > 60.0 && caveRand.NextInt(createShaftChance) == 0)
                 {
-                    CarveShaft(__instance, chunks, chunkX, chunkZ, posX, posY + (double)(verHeightGainAccum / 2f), posZ, horAngle + (caveRand.NextFloat() + caveRand.NextFloat() - 1f) + 3.1415927f, -1.6707964f + 0.2f * caveRand.NextFloat(), Math.Min(3.5f, horRadius - 1f), verticalSize + verHeightGainAccum, currentIteration, maxIterations - (int)((double)caveRand.NextFloat() * 0.5 * (double)maxIterations) + (int)(posY / 5.0 * (double)(0.5f + 0.5f * caveRand.NextFloat())), branchLevel);
+                    if(shaftsEnable)
+                    {
+                        CarveShaft(__instance, chunks, chunkX, chunkZ, posX, posY + (double)(verHeightGainAccum / 2f), posZ, horAngle + (caveRand.NextFloat() + caveRand.NextFloat() - 1f) + 3.1415927f, -1.6707964f + 0.2f * caveRand.NextFloat(), Math.Min(3.5f, horRadius - 1f), verticalSize + verHeightGainAccum, currentIteration, maxIterations - (int)((double)caveRand.NextFloat() * 0.5 * (double)maxIterations) + (int)(posY / 5.0 * (double)(0.5f + 0.5f * caveRand.NextFloat())), branchLevel);
+                    }
+                    
                     branchLevel++;
                 }
 
