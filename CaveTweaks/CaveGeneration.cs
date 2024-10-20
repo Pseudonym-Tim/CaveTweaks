@@ -22,6 +22,12 @@ namespace CaveTweaks
         private static MTRandom caveRand;
         private static NormalizedSimplexNoise basaltNoise;
 
+        public static int CaveAmountDivisor => InitializeMod.ModConfig.CaveAmountDivisor;
+        public static bool CreateShafts => InitializeMod.ModConfig.CreateShafts;
+        public static float TunnelVerticalSizeMultiplier => InitializeMod.ModConfig.TunnelVerticalSizeMultiplier;
+        public static float TunnelHorizontalSizeMultiplier => InitializeMod.ModConfig.TunnelHorizontalSizeMultiplier;
+        public static float TunnelCurvinessMultiplier => InitializeMod.ModConfig.TunnelCurvinessMultiplier;
+
         public void Init(ICoreServerAPI api)
         {
             ServerAPI = api;
@@ -295,7 +301,9 @@ namespace CaveTweaks
             int worldheight = ServerAPI.WorldManager.MapSizeY;
 
             worldGenBlockAccessor.BeginColumn();
-            int depthBasedCaveCount = (worldheight - 20) / 32; // Number of caves per chunk scaling with (worldheight - 20)... - Tim
+
+            // Calculate the number of caves based on the world height... - Tim
+            int depthBasedCaveCount = (worldheight - 20) / CaveAmountDivisor;
 
             FieldInfo chunkRandField = AccessTools.Field(typeof(GenCaves), "chunkRand");
             LCGRandom chunkRand = (LCGRandom)chunkRandField.GetValue(__instance);
@@ -313,29 +321,33 @@ namespace CaveTweaks
                 int posY = rnd + 8;
                 float horAngle = chunkRand.NextFloat() * 6.2831855f;
                 float vertAngle = (chunkRand.NextFloat() - 0.5f) * 0.25f;
-                float horizontalSize = chunkRand.NextFloat() * 2f + chunkRand.NextFloat();
-                float verticalSize = 0.75f + chunkRand.NextFloat() * 0.4f;
+
+                float horizontalSize = (chunkRand.NextFloat() * 2f + chunkRand.NextFloat()) * TunnelHorizontalSizeMultiplier;
+                float verticalSize = (0.75f + chunkRand.NextFloat() * 0.4f) * TunnelVerticalSizeMultiplier;
                 rnd = chunkRand.NextInt(500000000);
 
                 if(rnd % 100 < 4)
                 {
-                    horizontalSize = chunkRand.NextFloat() * 2f + chunkRand.NextFloat() + chunkRand.NextFloat();
-                    verticalSize = 0.25f + chunkRand.NextFloat() * 0.2f;
+                    horizontalSize = (chunkRand.NextFloat() * 2f + chunkRand.NextFloat() + chunkRand.NextFloat()) * TunnelHorizontalSizeMultiplier;
+                    verticalSize = (0.25f + chunkRand.NextFloat() * 0.2f) * TunnelVerticalSizeMultiplier;
                 }
                 else if(rnd % 100 == 4)
                 {
-                    horizontalSize = 0.75f + chunkRand.NextFloat();
-                    verticalSize = chunkRand.NextFloat() * 2f + chunkRand.NextFloat();
+                    horizontalSize = (0.75f + chunkRand.NextFloat()) * TunnelHorizontalSizeMultiplier;
+                    verticalSize = (chunkRand.NextFloat() * 2f + chunkRand.NextFloat()) * TunnelVerticalSizeMultiplier;
                 }
 
                 rnd /= 100;
                 bool extraBranchy = posY < TerraGenConfig.seaLevel / 2 && rnd % 50 == 0;
-                bool depthIncreasedBranching = posY < TerraGenConfig.seaLevel && rnd % (int)(100 - (posY / worldheight * 50)) == 0; // Increase branch probability as caves get deeper... - Tim
+                bool depthIncreasedBranching = posY < TerraGenConfig.seaLevel && rnd % (int)(100 - (posY / worldheight * 50)) == 0;
                 rnd /= 50;
                 int rnd2 = rnd % 1000;
                 rnd /= 1000;
                 bool largeNearLavaLayer = rnd2 % 10 < 3;
-                float curviness = (rnd == 0) ? 0.035f : ((rnd2 < 30) ? 0.5f : 0.1f);
+
+                float curveMult = TunnelCurvinessMultiplier;
+                float curviness = (rnd == 0) ? 0.035f * curveMult : ((rnd2 < 30) ? 0.5f * curveMult : 0.1f * curveMult);
+
                 int maxIterations = ChunkRange * 32 - 16;
                 maxIterations -= chunkRand.NextInt(maxIterations / 4);
                 caveRand.SetWorldSeed((ulong)chunkRand.NextInt(10000000));
@@ -375,9 +387,6 @@ namespace CaveTweaks
             float sizeChangeSpeedGain = 0f;
             int branchRand = (branchLevel + 1) * (extraBranchy ? 12 : 25);
 
-            // Higher chance to open near the surface... - Tim
-            float surfaceOpeningChance = (float)Math.Max(0.1, (100 - posY) / 100); 
-
             while(currentIteration++ < maxIterations)
             {
                 float relPos = (float)currentIteration / (float)maxIterations;
@@ -386,8 +395,8 @@ namespace CaveTweaks
                 float vertRadius = 1.5f + GameMath.FastSin(relPos * 3.1415927f) * (verticalSize + horRadiusLossAccum / 4f) + verHeightGainAccum;
                 vertRadius = Math.Min(vertRadius, Math.Max(0.6f, vertRadius - verHeightLossAccum));
 
-                // Use an extreme shrink factor to quickly close the cave approaching Y=12 - Tim
-                // (So we don't cut off the cave to reveal a completely flat basalt floor)
+                // Use an extreme shrink factor to try and quickly close the cave at lower levels... - Tim
+                // (So we don't have cases where the tunnels are cut off to reveal a completely flat basalt floor)
                 if(posY <= 16)
                 {
                     float factor = Math.Max((float)Math.Pow((posY - 12) / 4f, 5), 0.01f);
@@ -397,12 +406,6 @@ namespace CaveTweaks
 
                 float advanceHor = GameMath.FastCos(vertAngle);
                 float advanceVer = GameMath.FastSin(vertAngle);
-
-                // Increase the chance of the cave tunneling upward near the surface... - Tim
-                if(posY < 60 && caveRand.NextFloat() < surfaceOpeningChance)
-                {
-                    vertAngle += (caveRand.NextFloat() - 0.5f) * 0.2f; // Adds some vertical variation... - Tim
-                }
 
                 if(largeNearLavaLayer)
                 {
@@ -497,18 +500,20 @@ namespace CaveTweaks
                     horAngleChange *= caveRand.NextFloat() * 6f;
                 }
 
-                int brand = branchRand + 2 * Math.Max(0, (int)posY - (TerraGenConfig.seaLevel - 20));
+                int brand = branchRand + 1 * Math.Max(0, (int)posY - (TerraGenConfig.seaLevel - 20));
 
-                // Deeper cave levels have an increased chance to branch more frequently... - Tim
-                if(branchLevel < 3 && horRadius > 1.5f && caveRand.NextInt(60) == 0)
+                if(branchLevel < 3 && (vertRadius > 1f || horRadius > 1f) && caveRand.NextInt(brand) == 0)
                 {
-                    CarveTunnel(__instance, chunks, chunkX, chunkZ, posX, posY + vertRadius / 2, posZ, horAngle + (caveRand.NextFloat() - 0.5f), vertAngle + (caveRand.NextFloat() - 0.5f) * 0.3f, horizontalSize, verticalSize, currentIteration, maxIterations - currentIteration / 2, branchLevel + 1, true, curviness, largeNearLavaLayer);
+                    CarveTunnel(__instance, chunks, chunkX, chunkZ, posX, posY + (double)(verHeightGainAccum / 2f), posZ, horAngle + (caveRand.NextFloat() + caveRand.NextFloat() - 1f) + 3.1415927f, vertAngle + (caveRand.NextFloat() - 0.5f) * (caveRand.NextFloat() - 0.5f), horizontalSize, verticalSize + verHeightGainAccum, currentIteration, maxIterations - (int)((double)caveRand.NextFloat() * 0.5 * (double)maxIterations), branchLevel + 1, false, 0.1f, false);
                 }
 
-                if(branchLevel < 1 && horRadius > 3f && posY > 60.0 && caveRand.NextInt(60) == 0)
+                if(CreateShafts)
                 {
-                    CarveShaft(__instance, chunks, chunkX, chunkZ, posX, posY + (double)(verHeightGainAccum / 2f), posZ, horAngle + (caveRand.NextFloat() + caveRand.NextFloat() - 1f) + 3.1415927f, -1.6707964f + 0.2f * caveRand.NextFloat(), Math.Min(3.5f, horRadius - 1f), verticalSize + verHeightGainAccum, currentIteration, maxIterations - (int)((double)caveRand.NextFloat() * 0.5 * (double)maxIterations) + (int)(posY / 5.0 * (double)(0.5f + 0.5f * caveRand.NextFloat())), branchLevel);
-                    branchLevel++;
+                    if(branchLevel < 1 && horRadius > 3f && posY > 60.0 && caveRand.NextInt(60) == 0)
+                    {
+                        CarveShaft(__instance, chunks, chunkX, chunkZ, posX, posY + (double)(verHeightGainAccum / 2f), posZ, horAngle + (caveRand.NextFloat() + caveRand.NextFloat() - 1f) + 3.1415927f, -1.6707964f + 0.2f * caveRand.NextFloat(), Math.Min(3.5f, horRadius - 1f), verticalSize + verHeightGainAccum, currentIteration, maxIterations - (int)((double)caveRand.NextFloat() * 0.5 * (double)maxIterations) + (int)(posY / 5.0 * (double)(0.5f + 0.5f * caveRand.NextFloat())), branchLevel);
+                        branchLevel++;
+                    }
                 }
 
                 if((horRadius < 2f || rrnd % 5 != 0) && posX > (double)(-(double)horRadius * 2f) && posX < (double)(32f + horRadius * 2f) && posZ > (double)(-(double)horRadius * 2f) && posZ < (double)(32f + horRadius * 2f))
@@ -520,7 +525,7 @@ namespace CaveTweaks
             return false;
         }
 
-        // (Overridden to 5 in GenCaves class)...
+        // (Overridden to 5 in GenCaves class)... - Tim
         public static int ChunkRange { get { return 5; } }
     }
 }
