@@ -8,20 +8,20 @@ namespace CaveTweaks
 {
     public class ModConfig
     {
-        public int CaveAmountDivisor { get; set; } = 96;
-        public float TunnelHorizontalSizeMultiplier { get; set; } = 1.0f;
-        public float TunnelVerticalSizeMultiplier { get; set; } = 1.0f;
-        public float TunnelCurvinessMultiplier { get; set; } = 1.0f;
+        public int CaveAmountDivisor { get; set; } = 64;
+        public float TunnelHorizontalSizeMultiplier { get; set; } = 1.2f;
+        public float TunnelVerticalSizeMultiplier { get; set; } = 1.1f;
+        public float TunnelCurvinessMultiplier { get; set; } = 1.25f;
         public bool CreateShafts { get; set; } = false;
         public string ModVersion { get; set; } = null;
 
         public ModConfig()
         {
             // Initialize default settings...
-            CaveAmountDivisor = 96;
-            TunnelHorizontalSizeMultiplier = 1.0f;
-            TunnelVerticalSizeMultiplier = 1.0f;
-            TunnelCurvinessMultiplier = 1.0f;
+            CaveAmountDivisor = 64;
+            TunnelHorizontalSizeMultiplier = 1.2f;
+            TunnelVerticalSizeMultiplier = 1.1f;
+            TunnelCurvinessMultiplier = 1.25f;
             CreateShafts = false;
             ModVersion = InitializeMod.ModInfo.Version;
         }
